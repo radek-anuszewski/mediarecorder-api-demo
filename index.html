@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MediaRecorder Demo</title>
+  <script src="https://unpkg.com/konva@8/konva.min.js"></script>
+  <script type="module">
+    const preview = document.querySelector('#preview');
+    const info = document.querySelector('#info');
+    const subject = document.querySelector('#subject');
+    const face = document.querySelector('#face');
+    preview.addEventListener('loadedmetadata', () => preview.play());
+    let currentStream = null;
+    let recorder = null;
+    let chunks = [];
+
+    const disposeStream = () => {
+      if (!currentStream) {
+        return;
+      }
+      currentStream.getTracks().forEach(track => track.stop());
+    };
+
+    document.querySelector('#startCamera')
+      .addEventListener('click', async () => {
+        disposeStream();
+        currentStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: {
+              ideal: face.checked? 'user' : 'environment',
+            },
+          },
+        });
+        preview.srcObject = currentStream;
+        subject.innerHTML = 'Camera will be recorded';
+      });
+
+    document.querySelector('#startScreenShare')
+      .addEventListener('click', async () => {
+        disposeStream();
+        currentStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+        });
+        preview.srcObject = currentStream;
+        const displaySurface = currentStream.getTracks()[0].getSettings().displaySurface;
+        subject.innerHTML = `Screen will be recorded${displaySurface?
+          `, display surface: ${displaySurface}` : ''}`;
+      });
+
+    document.querySelector('#startCanvas')
+      .addEventListener('click', async () => {
+        disposeStream();
+        currentStream = document.querySelector('canvas').captureStream();
+        preview.srcObject = currentStream;
+        subject.innerHTML = 'Canvas will be recorded';
+      });
+
+    document.querySelector('#startRecording')
+      .addEventListener('click', () => {
+        info.innerHTML = 'Recording...';
+        recorder = new MediaRecorder(currentStream, { mimeType: 'video/webm' });
+        recorder.addEventListener('dataavailable', e => {
+          chunks.push(e.data);
+        });
+        recorder.start();
+      });
+
+    document.querySelector('#stopRecording')
+      .addEventListener('click', () => {
+        info.innerHTML = 'Not recording';
+        recorder.stop();
+      });
+
+    document.querySelector('#downloadRecording')
+      .addEventListener('click', () => {
+        const blob = new Blob(chunks, { type: 'video/mp4' });
+        chunks = [];
+        const a = document.createElement('a');
+        document.body.appendChild(a);
+        const url = window.URL.createObjectURL(blob);
+        a.href = url;
+        a.download = 'recording.mp4';
+        a.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 0);
+      });
+
+
+
+    // https://konvajs.org/docs/sandbox/Free_Drawing.html
+
+    // first we need Konva core things: stage and layer
+    var stage = new Konva.Stage({
+      container: 'container',
+      width: 400,
+      height: 250,
+    });
+
+    var layer = new Konva.Layer();
+    stage.add(layer);
+
+    var isPaint = false;
+    var mode = 'brush';
+    var lastLine;
+
+    stage.on('mousedown touchstart', function (e) {
+      isPaint = true;
+      var pos = stage.getPointerPosition();
+      lastLine = new Konva.Line({
+        stroke: '#df4b26',
+        strokeWidth: 5,
+        globalCompositeOperation:
+          mode === 'brush' ? 'source-over' : 'destination-out',
+        // round cap for smoother lines
+        lineCap: 'round',
+        // add point twice, so we have some drawings even on a simple click
+        points: [pos.x, pos.y, pos.x, pos.y],
+      });
+      layer.add(lastLine);
+    });
+
+    stage.on('mouseup touchend', function () {
+      isPaint = false;
+    });
+
+    // and core function - drawing
+    stage.on('mousemove touchmove', function (e) {
+      if (!isPaint) {
+        return;
+      }
+
+      // prevent scrolling on touch devices
+      e.evt.preventDefault();
+
+      const pos = stage.getPointerPosition();
+      var newPoints = lastLine.points().concat([pos.x, pos.y]);
+      lastLine.points(newPoints);
+    });
+  </script>
+</head>
+<body style="padding: 20px;">
+<p>
+  <label for="face">
+    Face camera?
+    <input id="face" type="checkbox">
+  </label>
+  <button id="startCamera">
+    Start camera
+  </button>
+  <button id="startScreenShare">
+    Start screen share
+  </button>
+  <button id="startCanvas">
+    Start canvas
+  </button>
+  <div>
+    <div id="info">
+      Not recording
+    </div>
+    <div id="subject"></div>
+  </div>
+</p>
+<p>
+  <button id="startRecording">
+    Start recording
+  </button>
+  <button id="stopRecording">
+    Stop recording
+  </button>
+  <button id="downloadRecording">
+    Download recording
+  </button>
+</p>
+<p>
+  <video id="preview"></video>
+  <div>Canvas to paint</div>
+  <div id="container" style="width: 400px; height: 250px; border: 1px solid black"></div>
+</p>
+</body>
+</html>
